@@ -1,10 +1,12 @@
-name: CI                       # nombre visible en la pestaña Actions
- 
-on: [push]                     # EVENTO: cuándo se ejecuta
- 
-jobs:                          # uno o más jobs
-  build:                       # id del job (lo eliges tú)
-    runs-on: ubuntu-latest     # RUNNER donde corre
-    steps:                     # pasos del job, en orden
-      - uses: actions/checkout@v4    # acción reutilizable
-      - run: echo "Hola Actions"     # comando de shell
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements-dev.txt
+      - run: python –m pytest -v
