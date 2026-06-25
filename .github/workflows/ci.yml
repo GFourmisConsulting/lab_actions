@@ -1,10 +1,86 @@
-name: CI                       # nombre visible en la pestaña Actions
- 
-on: [push]                     # EVENTO: cuándo se ejecuta
- 
-jobs:                          # uno o más jobs
-  build:                       # id del job (lo eliges tú)
-    runs-on: ubuntu-latest     # RUNNER donde corre
-    steps:                     # pasos del job, en orden
-      - uses: actions/checkout@v4    # acción reutilizable
-      - run: echo "Hola Actions"     # comando de shell
+name: CI etl-ventas
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+      - 'feature/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar ruff
+        run: pip install ruff==0.8.4
+      - name: Revisar estilo
+        run: ruff check src tests
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5        # sin cache aquí
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ matrix.python-version }}-${{ hashFiles('requirements-dev.txt') }}
+          restore-keys: pip-${{ matrix.python-version }}-
+      - run: pip install -r requirements-dev.txt
+      - name: Ejecutar pruebas
+        env: { PYTHONPATH: . }
+        run: |
+          mkdir -p reports
+          pytest -v --junitxml=reports/junit.xml
+
+  datos:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5        # sin cache aquí
+        with:
+          python-version: '3.11'
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-3.11-${{ hashFiles('requirements-dev.txt') }}
+          restore-keys: pip-3.11-
+      - run: pip install -r requirements-dev.txt
+      - name: Ejecutar ETL
+        env: { PYTHONPATH: . }
+        run: |
+          mkdir -p output
+          python run_pipeline.py --input data/ventas.csv \
+            --output output/ventas_limpias.csv
+      - name: Validar dataset
+        run: |
+          python -c "import pandas as pd; d=pd.read_csv('output/ventas_limpias.csv'); \
+          assert (d['monto']>0).all(), 'montos invalidos'; assert len(d)==3, 'filas != 3'"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ventas-limpias
+          path: |
+            output/**
+            reports/**
