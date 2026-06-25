@@ -1,0 +1,10 @@
+name: CI                       # nombre visible en la pestaña Actions
+ 
+on: [push]                     # EVENTO: cuándo se ejecuta
+ 
+jobs:                          # uno o más jobs
+  build:                       # id del job (lo eliges tú)
+    runs-on: ubuntu-latest     # RUNNER donde corre
+    steps:                     # pasos del job, en orden
+      - uses: actions/checkout@v4    # acción reutilizable
+      - run: echo "Hola Actions"     # comando de shell
